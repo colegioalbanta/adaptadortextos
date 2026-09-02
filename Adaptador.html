@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptador de Textos Competenciales v1.0 (DUA-LOMLOE)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- LIBRERÍAS PDF Y DOCX -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
+    <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        
+        .pdf-container {
+            font-family: 'Arial', sans-serif;
+            color: #1a202c;
+            background-color: #ffffff !important;
+        }
+
+        .adaptation-block {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-bottom: 12px;
+        }
+
+        .dyslexia-friendly {
+            font-family: 'OpenDyslexic', 'Courier New', sans-serif !important;
+            letter-spacing: 0.12em !important;
+            line-height: 1.8 !important;
+        }
+
+        #pdfExportRegion {
+            box-sizing: border-box;
+            background: #ffffff;
+            color: #1a202c;
+        }
+
+        @media print {
+            .no-print, header, form, button, #instructionsModal, #aiLoading { 
+                display: none !important; 
+            }
+            body, html { 
+                background: #ffffff !important; 
+                padding: 0 !important; 
+                margin: 0 !important; 
+                width: 100% !important;
+            }
+            .max-w-7xl {
+                max-width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            #pdfWorkspace { 
+                border: none !important; 
+                box-shadow: none !important; 
+                padding: 0 !important; 
+                margin: 0 !important;
+            }
+            #adaptedContent {
+                display: block !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans">
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <!-- CABECERA -->
+        <header class="mb-8 no-print border-b border-slate-200 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="flex items-center space-x-4">
+                <img id="headerLogoImg" src="logo_adaptador.png" alt="Adaptador Logo" class="h-14 w-14 object-contain rounded-xl shadow-sm" onerror="this.style.display='none'">
+                <div>
+                    <h1 class="text-2xl font-extrabold text-teal-700">Adaptador Albanta v1.0</h1>
+                    <p class="text-slate-500 text-xs">Inclusión Educativa y DUA - Marco LOMLOE</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button type="button" id="btnInstrucciones" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 shadow-sm transition">
+                    <span>📖 Instrucciones y API Key</span>
+                </button>
+                
+                <div class="bg-teal-50 border border-teal-100 text-teal-700 px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5">
+                    <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span> Motor DUA Activo
+                </div>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- PANEL DE CONFIGURACIÓN -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-slate-200 no-print h-fit space-y-6">
+                
+                <div>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <span class="p-2 bg-teal-50 text-teal-600 rounded-lg font-bold text-sm">01</span>
+                        <h2 class="text-xl font-bold text-slate-800">Conexión Cloud AI</h2>
+                    </div>
+                    <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">Modelo de IA</label>
+                            <select id="aiProvider" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold focus:ring-2 focus:ring-teal-500">
+                                <option value="gemini-2.5-flash" selected>Google Gemini 2.5 Flash (Gratuito / Recomendado)</option>
+                                <option value="gemini-3.1-pro-preview">Google Gemini 3.1 Pro (Requiere Pago)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">API Key Personal</label>
+                            <input type="password" id="apiKey" class="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-teal-500 transition" placeholder="Introduce tu clave AIzaSy...">
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <span class="p-2 bg-teal-50 text-teal-600 rounded-lg font-bold text-sm">02</span>
+                        <h2 class="text-xl font-bold text-slate-800">Parámetros del Alumnado</h2>
+                    </div>
+                    
+                    <form id="adaptForm">
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Etapa Educativa</label>
+                            <select id="etapa" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 transition" required>
+                                <option value="infantil">Educación Infantil</option>
+                                <option value="primaria">Educación Primaria</option>
+                                <option value="secundaria">Educación Secundaria (ESO)</option>
+                                <option value="bachillerato">Bachillerato</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Perfil de Neurodivergencia</label>
+                            <select id="perfil" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 transition" required>
+                                <option value="dislexia">Dislexia / Dificultades de Lectura</option>
+                                <option value="tdah">TDAH (Atención y Función Ejecutiva)</option>
+                                <option value="tea">TEA (Comprensión Literal / Lectura Fácil)</option>
+                                <option value="aacc">Altas Capacidades (Enriquecimiento)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Documento de Apoyo (.pdf, .doc, .docx)</label>
+                            <label class="flex flex-col items-center justify-center w-full h-16 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition">
+                                <div class="text-center px-2 py-1">
+                                    <p class="text-xs text-slate-500 font-medium" id="fileStatusText">
+                                        <span class="font-semibold text-teal-600">Subir .pdf o .docx opcional</span>
+                                    </p>
+                                </div>
+                                <input id="docAdjunto" type="file" accept=".pdf,.doc,.docx" class="hidden" />
+                            </label>
+                        </div>
+
+                        <div class="mb-6">
+                            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Texto u Orden Original</label>
+                            <textarea id="textoOriginal" rows="8" class="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 transition" placeholder="Pega aquí el texto que quieres adaptar (o sube un archivo arriba)..."></textarea>
+                        </div>
+
+                        <button type="submit" id="btnSubmit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 px-4 rounded-lg transition shadow-sm flex justify-center items-center gap-2">
+                            <span>Adaptar Texto con DUA/LOMLOE</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- PREVISUALIZACIÓN -->
+            <div class="lg:col-span-2">
+                <div class="flex justify-between items-center mb-4 no-print">
+                    <div class="flex items-center space-x-2">
+                        <span class="p-2 bg-emerald-50 text-emerald-600 rounded-lg font-bold text-sm">03</span>
+                        <h2 class="text-xl font-bold text-slate-800">Texto Adaptado / Espacio de Trabajo</h2>
+                    </div>
+                    <button type="button" id="btnPdf" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg transition shadow-sm hidden flex items-center gap-2">
+                        <span>Descargar PDF Oficial</span>
+                    </button>
+                </div>
+
+                <div id="pdfWorkspace" class="bg-white p-8 rounded-xl shadow-sm border border-slate-200 pdf-container min-h-[650px] relative">
+                    
+                    <div id="aiLoading" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-center p-8 no-print">
+                        <div class="animate-spin rounded-full h-14 w-14 border-4 border-slate-200 border-t-teal-600 mb-4"></div>
+                        <h3 class="text-lg font-bold text-slate-800">Adaptando texto con IA...</h3>
+                        <p class="text-xs text-slate-500 max-w-sm mt-1">Aplicando pautas DUA y LOMLOE para el perfil seleccionado. Espera unos segundos...</p>
+                    </div>
+
+                    <div id="placeholderText" class="text-slate-400 text-center py-20 flex flex-col items-center justify-center space-y-4 no-print">
+                        <img id="mainLogo" src="logo_adaptador.png" alt="Adaptador Logo Centrado" class="h-32 w-32 object-contain opacity-75" onerror="this.style.display='none'">
+                        <div>
+                            <p class="text-base font-medium text-slate-600">Introduce el texto o sube un documento a la izquierda.</p>
+                            <p class="text-xs text-slate-400 mt-1">La IA generará una versión adaptada siguiendo los principios DUA.</p>
+                        </div>
+                    </div>
+                    
+                    <div id="adaptedContent" class="hidden">
+                        <div id="pdfExportRegion" class="p-2">
+                            <div class="border-b-4 border-teal-600 pb-3 mb-4 flex justify-between items-start">
+                                <div>
+                                    <span id="pdfEtapaPerfil" class="text-xs font-bold uppercase tracking-widest text-teal-700 bg-teal-50 px-2.5 py-1 rounded"></span>
+                                    <h1 id="pdfTitulo" class="text-xl font-extrabold text-slate-900 mt-2">Texto Adaptado - DUA / LOMLOE</h1>
+                                </div>
+                                <img id="pdfLogo" src="logo_adaptador.png" alt="Logo PDF" class="h-14 w-14 object-contain ml-4 rounded-xl" onerror="this.style.display='none'">
+                            </div>
+
+                            <div class="adaptation-block mb-4">
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-teal-800 mb-2 bg-teal-50/50 p-1.5 rounded border-l-4 border-teal-600 pl-3">Texto Adaptado Accesible</h3>
+                                <div id="textoAdaptado" class="text-slate-800 text-sm leading-relaxed space-y-3"></div>
+                            </div>
+
+                            <div class="adaptation-block">
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-teal-800 mb-2 bg-teal-50/50 p-1.5 rounded border-l-4 border-teal-600 pl-3">Justificación y Pautas DUA Aplicadas</h3>
+                                <div id="justificacionDUA" class="text-slate-700 text-xs leading-relaxed space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL INSTRUCCIONES Y API KEY -->
+    <div id="instructionsModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 transition-all duration-300 no-print">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-2xl w-full overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]">
+            <div class="bg-teal-700 px-6 py-4 flex justify-between items-center text-white">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">📖</span>
+                    <h3 class="text-lg font-bold">Guía de Uso y Clave de API</h3>
+                </div>
+                <button id="btnCerrarModalX" class="text-white/80 hover:text-white transition text-2xl font-semibold focus:outline-none">&times;</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto space-y-6 text-xs text-slate-700 leading-relaxed">
+                <div class="bg-teal-50 border border-teal-200 rounded-xl p-4 space-y-3">
+                    <h4 class="font-bold text-sm text-teal-900 flex items-center gap-1.5">
+                        <span>🔑</span> Obtén tu API Key Gratuita de Google Gemini
+                    </h4>
+                    <p class="text-teal-950 font-medium">
+                        Sigue estos tres sencillos pasos para vincular tu cuenta:
+                    </p>
+                    <ol class="list-decimal list-inside space-y-1.5 pl-2 text-teal-900 font-medium">
+                        <li>Accede al portal oficial de <a href="https://aistudio.google.com/" target="_blank" class="text-teal-600 underline font-bold hover:text-teal-800">Google AI Studio</a>.</li>
+                        <li>Haz clic en <strong>"Get API Key"</strong> y posteriormente en <strong>"Create API Key"</strong>.</li>
+                        <li>Copia la clave generada (comienza por <code class="bg-teal-100 px-1 py-0.5 rounded font-mono text-[10px]">AIzaSy...</code>) y pégala en el panel lateral de la app.</li>
+                    </ol>
+                </div>
+
+                <div class="space-y-2">
+                    <h4 class="font-bold text-xs uppercase tracking-wider text-slate-800">📄 Archivos compatibles</h4>
+                    <p>Puedes subir directamente documentos en formato <strong>.pdf</strong>, <strong>.docx</strong> o <strong>.doc</strong>. La aplicación extraerá el contenido automáticamente para adaptarlo.</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-3.5 border-t border-slate-100 flex justify-end">
+                <button id="btnCerrarModal" class="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-1.5 px-4 rounded-lg text-xs transition shadow-sm">
+                    Entendido, cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT DE FUNCIONAMIENTO COMPLETO -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.pdfjsLib) {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
+            }
+
+            const modal = document.getElementById('instructionsModal');
+            const btnInstrucciones = document.getElementById('btnInstrucciones');
+            const btnCerrarModal = document.getElementById('btnCerrarModal');
+            const btnCerrarModalX = document.getElementById('btnCerrarModalX');
+            const inputDoc = document.getElementById('docAdjunto');
+            const statusText = document.getElementById('fileStatusText');
+            const adaptForm = document.getElementById('adaptForm');
+            const btnPdf = document.getElementById('btnPdf');
+
+            function abrirModal() { modal.classList.remove('hidden'); }
+            function cerrarModal() { modal.classList.add('hidden'); }
+
+            if (btnInstrucciones) btnInstrucciones.addEventListener('click', abrirModal);
+            if (btnCerrarModal) btnCerrarModal.addEventListener('click', cerrarModal);
+            if (btnCerrarModalX) btnCerrarModalX.addEventListener('click', cerrarModal);
+
+            if (inputDoc) {
+                inputDoc.addEventListener('change', async function() {
+                    if (!this.files || !this.files[0]) return;
+                    const file = this.files[0];
+                    const fileName = file.name.toLowerCase();
+                    statusText.innerHTML = `<span class="font-bold text-teal-600">Procesando: ${file.name}...</span>`;
+
+                    try {
+                        if (fileName.endsWith('.pdf')) {
+                            const arrayBuffer = await file.arrayBuffer();
+                            const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                            let text = '';
+                            for (let i = 1; i <= pdf.numPages; i++) {
+                                const page = await pdf.getPage(i);
+                                const content = await page.getTextContent();
+                                text += content.items.map(item => item.str).join(' ') + '\n';
+                            }
+                            document.getElementById('textoOriginal').value = text;
+                            statusText.innerHTML = `<span class="font-bold text-emerald-600">✔ PDF cargado (${file.name})</span>`;
+                        } else if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) {
+                            const arrayBuffer = await file.arrayBuffer();
+                            const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                            document.getElementById('textoOriginal').value = result.value;
+                            statusText.innerHTML = `<span class="font-bold text-emerald-600">✔ Word cargado (${file.name})</span>`;
+                        } else {
+                            alert("Formato no soportado. Selecciona un archivo .pdf, .doc o .docx.");
+                            statusText.innerHTML = `<span class="font-semibold text-teal-600">Subir .pdf o .docx opcional</span>`;
+                        }
+                    } catch (err) {
+                        console.error("Error al leer archivo:", err);
+                        alert("No se pudo extraer el texto del archivo. Puedes copiar y pegar el texto manualmente.");
+                        statusText.innerHTML = `<span class="font-semibold text-teal-600">Subir .pdf o .docx opcional</span>`;
+                    }
+                });
+            }
+
+            if (adaptForm) {
+                adaptForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    const apiKey = document.getElementById('apiKey').value.trim();
+                    if (!apiKey) {
+                        alert("Por favor, introduce tu Gemini API Key en el panel lateral.");
+                        return;
+                    }
+
+                    const textoInput = document.getElementById('textoOriginal').value.trim();
+                    if (!textoInput) {
+                        alert("Por favor, introduce un texto o sube un documento.");
+                        return;
+                    }
+
+                    document.getElementById('placeholderText').classList.add('hidden');
+                    document.getElementById('adaptedContent').classList.remove('hidden');
+                    document.getElementById('btnPdf').classList.remove('hidden');
+                    document.getElementById('aiLoading').classList.remove('hidden');
+
+                    const etapaSelect = document.getElementById('etapa');
+                    const perfilSelect = document.getElementById('perfil');
+                    const etapaText = etapaSelect.options[etapaSelect.selectedIndex].text;
+                    const perfilText = perfilSelect.options[perfilSelect.selectedIndex].text;
+
+                    document.getElementById('pdfEtapaPerfil').textContent = `${etapaText.toUpperCase()} | ${perfilText.toUpperCase()}`;
+
+                    const promptContexto = `Actúa como un experto en inclusión educativa, neurodivergencia y DUA (Diseño Universal para el Aprendizaje) en el marco LOMLOE en España.
+    Adaptar el siguiente texto para un alumno con perfil: ${perfilText} (${perfilSelect.value}), Etapa: ${etapaText}.
+    Texto: "${textoInput}"
+
+    Responde ÚNICAMENTE un objeto JSON sin markdown:
+    {
+       "textoAdaptado": "Texto adaptado formateado en HTML estricto (<p>, <ul>, <li>, <strong>)",
+       "justificacionDUA": "Explicación de pautas DUA y LOMLOE aplicadas"
+    }`;
+
+                    try {
+                        const modelTarget = document.getElementById('aiProvider').value || "gemini-2.5-flash"; 
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelTarget}:generateContent?key=${apiKey}`;
+
+                        const response = await fetch(url, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: promptContexto }] }],
+                                generationConfig: { responseMimeType: "application/json", temperature: 0.5 }
+                            })
+                        });
+
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({}));
+                            throw new Error(errorData.error?.message || "Servicio de IA no disponible.");
+                        }
+
+                        const data = await response.json();
+                        let rawText = data.candidates[0].content.parts[0].text.trim();
+                        rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+                        const resJson = JSON.parse(rawText);
+
+                        const contenedorTexto = document.getElementById('textoAdaptado');
+                        contenedorTexto.innerHTML = resJson.textoAdaptado;
+
+                        if (perfilSelect.value === 'dislexia') {
+                            contenedorTexto.classList.add('dyslexia-friendly');
+                        } else {
+                            contenedorTexto.classList.remove('dyslexia-friendly');
+                        }
+
+                        document.getElementById('justificacionDUA').innerHTML = `<p>${resJson.justificacionDUA}</p>`;
+
+                    } catch (err) {
+                        alert("Error API: " + err.message);
+                    } finally {
+                        document.getElementById('aiLoading').classList.add('hidden');
+                    }
+                });
+            }
+
+            if (btnPdf) {
+                btnPdf.addEventListener('click', async function() {
+                    const targetElement = document.getElementById('pdfExportRegion');
+                    if (!targetElement) return;
+
+                    btnPdf.disabled = true;
+                    btnPdf.innerText = "Generando PDF...";
+
+                    const opciones = {
+                        margin: [10, 10, 10, 10],
+                        filename: 'texto_adaptado_dua_albanta.pdf',
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true, logging: false },
+                        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                    };
+
+                    try {
+                        await window.html2pdf().set(opciones).from(targetElement).save();
+                    } catch (err) {
+                        window.print();
+                    } finally {
+                        btnPdf.disabled = false;
+                        btnPdf.innerText = "Descargar PDF Oficial";
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
