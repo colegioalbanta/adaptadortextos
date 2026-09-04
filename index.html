@@ -14,6 +14,10 @@
     <link class="no-print" rel="apple-touch-icon" href="AdaptacionLogo.png">
     <link class="no-print" rel="icon" type="image/png" href="AdaptacionLogo.png">
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -48,6 +52,68 @@
 
         .adapted-text li {
             margin-bottom: 0.25rem;
+        }
+
+        /* ===== TIPOGRAFÍA ADAPTADA SEGÚN PERFIL =====
+           "Lexend" es una familia tipográfica diseñada específicamente para mejorar
+           la fluidez y velocidad lectora (validada en estudios de accesibilidad
+           cognitiva). Nunca se usa texto justificado: genera espacios irregulares
+           entre palabras que dificultan el seguimiento de la línea, especialmente
+           en dislexia y TDAH. */
+
+        #saContent #pdfPautas,
+        #saContent #pdfTextoAdaptado,
+        #saContent #pdfActividades {
+            text-align: left !important;
+        }
+
+        .perfil-dislexia #pdfTextoAdaptado,
+        .perfil-dislexia #pdfPautas,
+        .perfil-dislexia #pdfActividades,
+        .perfil-dil #pdfTextoAdaptado,
+        .perfil-dil #pdfPautas,
+        .perfil-dil #pdfActividades,
+        .perfil-tel #pdfTextoAdaptado,
+        .perfil-tel #pdfPautas,
+        .perfil-tel #pdfActividades {
+            font-family: 'Lexend', Arial, sans-serif;
+            font-size: 1.05rem;
+            line-height: 2;
+            letter-spacing: 0.03em;
+            word-spacing: 0.14em;
+        }
+
+        .perfil-tdah #pdfTextoAdaptado,
+        .perfil-tdah #pdfPautas,
+        .perfil-tdah #pdfActividades {
+            font-family: 'Lexend', Arial, sans-serif;
+            font-size: 1rem;
+            line-height: 1.85;
+            letter-spacing: 0.01em;
+        }
+
+        .perfil-tea #pdfTextoAdaptado,
+        .perfil-tea #pdfPautas,
+        .perfil-tea #pdfActividades {
+            font-family: 'Lexend', Arial, sans-serif;
+            font-size: 1rem;
+            line-height: 1.75;
+            letter-spacing: 0.01em;
+        }
+
+        .perfil-aacc #pdfTextoAdaptado,
+        .perfil-aacc #pdfPautas,
+        .perfil-aacc #pdfActividades {
+            font-family: 'Lexend', Arial, sans-serif;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* Ningún perfil usa cursiva: dificulta la lectura en dislexia y TEL/DIL */
+        #saContent #pdfTextoAdaptado em,
+        #saContent #pdfTextoAdaptado i {
+            font-style: normal;
+            font-weight: 600;
         }
 
         @media print {
@@ -256,7 +322,7 @@
 
                         <div class="sa-block">
                             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-2 bg-emerald-50/50 p-1.5 rounded border-l-4 border-emerald-600 pl-3">1. Pautas Metodológicas y Estrategias Aplicadas</h3>
-                            <div id="pdfPautas" class="text-slate-700 text-xs leading-relaxed text-justify mb-4"></div>
+                            <div id="pdfPautas" class="text-slate-700 text-xs leading-relaxed mb-4"></div>
                         </div>
 
                         <div class="sa-block">
@@ -549,6 +615,25 @@
             throw new Error(`Error API Gemini: ${detalle}`);
         }
 
+        // Aplica la tipografía adaptada (fuente, interlineado, espaciado) según el
+        // perfil de neurodivergencia seleccionado, sobre el contenedor del resultado.
+        function aplicarTipografiaPerfil(neurodivergencia) {
+            const contenedor = document.getElementById('saContent');
+            const clases = ['perfil-tdah', 'perfil-tea', 'perfil-dislexia', 'perfil-aacc', 'perfil-dil', 'perfil-tel'];
+            contenedor.classList.remove(...clases);
+            const mapa = {
+                'TDAH': 'perfil-tdah',
+                'TEA': 'perfil-tea',
+                'Dislexia': 'perfil-dislexia',
+                'AACC': 'perfil-aacc',
+                'DIL': 'perfil-dil',
+                'TEL': 'perfil-tel'
+            };
+            if (mapa[neurodivergencia]) {
+                contenedor.classList.add(mapa[neurodivergencia]);
+            }
+        }
+
         async function ejecutarGeneracionIA(apiKey) {
             const loader = document.getElementById('aiLoading');
             loader.classList.remove('hidden');
@@ -559,6 +644,7 @@
             const neurodivergencia = document.getElementById('neurodivergencia').value;
             const textoOriginal = document.getElementById('textoOriginal').value;
             const actividadesActivas = document.getElementById('duaToggle').checked;
+            aplicarTipografiaPerfil(neurodivergencia);
 
             document.getElementById('pdfEtapaMateria').textContent = `${etapa} | Adaptación de Texto`;
             document.getElementById('pdfTitulo').textContent = `Material Adaptado: Perfil ${neurodivergencia}`;
@@ -658,7 +744,7 @@ Devuelve OBLIGATORIAMENTE un JSON con esta estructura exacta:
             const curso = document.getElementById('curso').value;
             const neurodivergencia = document.getElementById('neurodivergencia').value;
             const textoOriginal = document.getElementById('textoOriginal').value;
-
+            aplicarTipografiaPerfil(neurodivergencia);
             document.getElementById('pdfEtapaMateria').textContent = `${etapa} | Adaptación de Texto`;
             document.getElementById('pdfTitulo').textContent = `Material Adaptado: Perfil ${neurodivergencia}`;
             document.getElementById('pdfCursoAsignado').textContent = curso;
