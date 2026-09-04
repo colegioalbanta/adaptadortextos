@@ -515,17 +515,38 @@
 
         async function llamarGeminiUnaVez(apiKey, modelo, promptContexto, temperature) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: promptContexto }] }],
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        temperature: temperature
-                    }
-                })
-            });
+
+            // Límite de tiempo por petición: en algunas ocasiones la API de Google se
+            // queda esperando sin responder ni dar error (se "cuelga"). Sin este límite,
+            // la app se quedaría pensando para siempre. Pasados 25s, la abortamos y lo
+            // tratamos como una saturación temporal para que se reintente o cambie de modelo.
+            const controlador = new AbortController();
+            const timeoutId = setTimeout(() => controlador.abort(), 25000);
+
+            let response;
+            try {
+                response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    signal: controlador.signal,
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptContexto }] }],
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            temperature: temperature
+                        }
+                    })
+                });
+            } catch (fetchErr) {
+                if (fetchErr.name === 'AbortError') {
+                    const err = new Error('The model did not respond in time (timeout). Please try again later.');
+                    err.status = 504;
+                    throw err;
+                }
+                throw fetchErr;
+            } finally {
+                clearTimeout(timeoutId);
+            }
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -556,7 +577,7 @@
 
         function esErrorTemporalDeSaturacion(err) {
             const msg = (err.message || '').toLowerCase();
-            return err.status === 429 || err.status === 503 || msg.includes('high demand') || msg.includes('overloaded') || msg.includes('unavailable') || msg.includes('try again later') || msg.includes('rate limit') || msg.includes('quota');
+            return err.status === 429 || err.status === 503 || err.status === 504 || msg.includes('high demand') || msg.includes('overloaded') || msg.includes('unavailable') || msg.includes('try again later') || msg.includes('rate limit') || msg.includes('quota') || msg.includes('timeout');
         }
 
         function esperar(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -638,27 +659,28 @@
             const loader = document.getElementById('aiLoading');
             loader.classList.remove('hidden');
 
-            const provider = document.getElementById('aiProvider').value;
-            const etapa = document.getElementById('etapa').options[document.getElementById('etapa').selectedIndex].text;
-            const curso = document.getElementById('curso').value;
-            const neurodivergencia = document.getElementById('neurodivergencia').value;
-            const textoOriginal = document.getElementById('textoOriginal').value;
-            const actividadesActivas = document.getElementById('duaToggle').checked;
-            aplicarTipografiaPerfil(neurodivergencia);
+            try {
+                const provider = document.getElementById('aiProvider').value;
+                const etapa = document.getElementById('etapa').options[document.getElementById('etapa').selectedIndex].text;
+                const curso = document.getElementById('curso').value;
+                const neurodivergencia = document.getElementById('neurodivergencia').value;
+                const textoOriginal = document.getElementById('textoOriginal').value;
+                const actividadesActivas = document.getElementById('duaToggle').checked;
+                aplicarTipografiaPerfil(neurodivergencia);
 
-            document.getElementById('pdfEtapaMateria').textContent = `${etapa} | Adaptación de Texto`;
-            document.getElementById('pdfTitulo').textContent = `Material Adaptado: Perfil ${neurodivergencia}`;
-            document.getElementById('pdfCursoAsignado').textContent = curso;
-            document.getElementById('pdfPerfil').textContent = neurodivergencia;
-            
-            if (documentoCargadoNombre) {
-                document.getElementById('pdfDocumentoBox').style.display = 'block';
-                document.getElementById('pdfDocumentoNombre').textContent = documentoCargadoNombre;
-            } else { 
-                document.getElementById('pdfDocumentoBox').style.display = 'none'; 
-            }
+                document.getElementById('pdfEtapaMateria').textContent = `${etapa} | Adaptación de Texto`;
+                document.getElementById('pdfTitulo').textContent = `Material Adaptado: Perfil ${neurodivergencia}`;
+                document.getElementById('pdfCursoAsignado').textContent = curso;
+                document.getElementById('pdfPerfil').textContent = neurodivergencia;
 
-            const promptContexto = `Eres un Especialista en Pedagógica Terapéutica y Accesibilidad Cognitiva.
+                if (documentoCargadoNombre) {
+                    document.getElementById('pdfDocumentoBox').style.display = 'block';
+                    document.getElementById('pdfDocumentoNombre').textContent = documentoCargadoNombre;
+                } else {
+                    document.getElementById('pdfDocumentoBox').style.display = 'none';
+                }
+
+                const promptContexto = `Eres un Especialista en Pedagógica Terapéutica y Accesibilidad Cognitiva.
 TU TAREA ES REESCRIBIR Y ADAPTAR COMPLETAMENTE EL SIGUIENTE TEXTO ORIGINAL. NO DEBES REPETIR EL TEXTO ORIGINAL SIN CAMBIOS.
 
 Texto original a reescribir:
@@ -689,19 +711,29 @@ Devuelve OBLIGATORIAMENTE un JSON con esta estructura exacta:
    ]
 }`;
 
-            try {
                 let resJson = null;
 
                 if (provider === 'openai') {
-                    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-                        body: JSON.stringify({
-                            model: "gpt-4o-mini",
-                            messages: [{ role: "user", content: promptContexto }],
-                            temperature: 0.4
-                        })
-                    });
+                    const controladorOpenAI = new AbortController();
+                    const timeoutOpenAI = setTimeout(() => controladorOpenAI.abort(), 25000);
+                    let response;
+                    try {
+                        response = await fetch("https://api.openai.com/v1/chat/completions", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+                            signal: controladorOpenAI.signal,
+                            body: JSON.stringify({
+                                model: "gpt-4o-mini",
+                                messages: [{ role: "user", content: promptContexto }],
+                                temperature: 0.4
+                            })
+                        });
+                    } catch (fetchErr) {
+                        if (fetchErr.name === 'AbortError') throw new Error("OpenAI no respondió a tiempo (timeout). Inténtalo de nuevo.");
+                        throw fetchErr;
+                    } finally {
+                        clearTimeout(timeoutOpenAI);
+                    }
                     if (!response.ok) throw new Error("Error en la conexión con OpenAI.");
                     const data = await response.json();
                     let rawContent = data.choices[0].message.content.trim();
